@@ -1,0 +1,201 @@
+.call-system {
+  min-height: 100vh;
+  background: #f5f5f5;
+}
+
+.call-header {
+  background: white;
+  padding: 1rem 2rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.call-header h1 {
+  margin: 0;
+  color: #333;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.logout-btn {
+  padding: 8px 16px;
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.call-content {
+  padding: 2rem;
+}
+
+.error-message {
+  background: #f8d7da;
+  color: #721c24;
+  padding: 1rem;
+  border-radius: 5px;
+  margin-bottom: 1rem;
+  border: 1px solid #f5c6cb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.error-message p {
+  margin: 0;
+}
+
+.dismiss-btn {
+  background: #721c24;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.calling-status {
+  text-align: center;
+  padding: 2rem;
+}
+
+.calling-status h3 {
+  margin-bottom: 1rem;
+}
+
+.calling-status p {
+  font-size: 18px;
+  margin-bottom: 2rem;
+}
+
+/* Video Call Styles */
+.video-call-container {
+  position: relative;
+  height: 80vh;
+  background: #000;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.local-video {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 200px;
+  height: 150px;
+  background: #333;
+  border-radius: 10px;
+  z-index: 2;
+  object-fit: cover;
+}
+
+.remote-video {
+  width: 100%;
+  height: 100%;
+  background: #222;
+  object-fit: cover;
+}
+
+/* Audio Call Styles */
+.audio-call-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 80vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 10px;
+  color: white;
+  text-align: center;
+}
+
+.audio-call-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.caller-avatar {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.avatar-text {
+  font-size: 48px;
+  font-weight: bold;
+  color: white;
+}
+
+.audio-call-info h3 {
+  font-size: 24px;
+  margin: 0;
+}
+
+.audio-call-info p {
+  font-size: 16px;
+  opacity: 0.8;
+  margin: 0;
+}
+
+/* Audio Visualizer */
+.audio-visualizer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2rem;
+}
+
+.bar {
+  width: 4px;
+  height: 20px;
+  background: white;
+  border-radius: 2px;
+  animation: audioWave 1.5s ease-in-out infinite;
+}
+
+.bar:nth-child(2) { animation-delay: 0.1s; }
+.bar:nth-child(3) { animation-delay: 0.2s; }
+.bar:nth-child(4) { animation-delay: 0.3s; }
+.bar:nth-child(5) { animation-delay: 0.4s; }
+
+@keyframes audioWave {
+  0%, 100% { height: 20px; opacity: 0.4; }
+  50% { height: 40px; opacity: 1; }
+}
+
+.call-controls {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+}
+
+.end-call-btn {
+  padding: 12px 24px;
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 25px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.end-call-btn:hover {
+  background: #c82333;
+} 

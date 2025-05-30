@@ -1,0 +1,71 @@
+.incoming-call-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.incoming-call-modal {
+  background: white;
+  padding: 2rem;
+  border-radius: 15px;
+  text-align: center;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+  min-width: 300px;
+}
+
+.call-type-icon {
+  font-size: 48px;
+  margin-bottom: 1rem;
+}
+
+.incoming-call-modal h3 {
+  margin-bottom: 1rem;
+  color: #333;
+}
+
+.incoming-call-modal p {
+  margin-bottom: 2rem;
+  font-size: 18px;
+  color: #666;
+}
+
+.call-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.accept-btn {
+  padding: 12px 24px;
+  background: #28a745;
+  color: white;
+  border: none;
+  border-radius: 25px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.reject-btn {
+  padding: 12px 24px;
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 25px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.accept-btn:hover {
+  background: #218838;
+}
+
+.reject-btn:hover {
+  background: #c82333;
+} 
