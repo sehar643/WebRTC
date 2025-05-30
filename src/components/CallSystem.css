@@ -198,4 +198,34 @@
 
 .end-call-btn:hover {
   background: #c82333;
+}
+
+.connection-status {
+  margin-top: 10px;
+  padding: 5px 10px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  font-size: 0.9em;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.audio-visualizer.active .bar {
+  animation: sound 0ms -800ms linear infinite alternate;
+}
+
+.audio-visualizer .bar:nth-child(1) { animation-duration: 474ms; }
+.audio-visualizer .bar:nth-child(2) { animation-duration: 433ms; }
+.audio-visualizer .bar:nth-child(3) { animation-duration: 407ms; }
+.audio-visualizer .bar:nth-child(4) { animation-duration: 458ms; }
+.audio-visualizer .bar:nth-child(5) { animation-duration: 400ms; }
+
+@keyframes sound {
+  0% {
+    opacity: .35;
+    height: 3px;
+  }
+  100% {
+    opacity: 1;
+    height: 15px;
+  }
 } 
