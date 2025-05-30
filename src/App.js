@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import './App.css';
 import CallSystem from './components/CallSystem';
 import UserLogin from './components/UserLogin';

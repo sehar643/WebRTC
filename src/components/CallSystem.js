@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import io from 'socket.io-client';
 import UserList from './UserList';
 import IncomingCall from './IncomingCall';
@@ -20,6 +20,28 @@ const CallSystem = ({ user, onLogout }) => {
   const ringbackRef = useRef(null);
   const remoteAudioRef = useRef(null);
 
+  // Memoize functions that are used in useEffect
+  const handleEndCall = useCallback(() => {
+    console.log('Ending call and cleaning up resources');
+    stopRingtone();
+    stopRingback();
+    
+    if (currentCall) {
+      currentCall.endCall();
+    }
+    
+    setCallStatus('idle');
+    setCurrentCall(null);
+    setIncomingCall(null);
+    setConnectionState('new');
+  }, [currentCall]);
+
+  const handlePlayRingtone = useCallback(() => {
+    if (ringtoneRef.current) {
+      ringtoneRef.current.play().catch(e => console.warn('Ringtone autoplay failed:', e));
+    }
+  }, []);
+
   useEffect(() => {
     const newSocket = io('http://localhost:5001');
     setSocket(newSocket);
@@ -40,7 +62,7 @@ const CallSystem = ({ user, onLogout }) => {
       console.log('Received incoming call:', data);
       setIncomingCall(data);
       setCallType(data.callType || 'video');
-      playRingtone();
+      handlePlayRingtone();
     });
 
     // Listen for call answered
@@ -53,21 +75,16 @@ const CallSystem = ({ user, onLogout }) => {
           setCallStatus('connecting');
         } catch (error) {
           console.error('Error handling answer:', error);
-          endCall();
+          handleEndCall();
         }
       }
     });
 
     // Listen for ICE candidates
     const handleIceCandidate = async (data) => {
-      if (!currentCall) return;
+      if (!currentCall || data.senderId === newSocket.id) return;
       
       try {
-        if (data.senderId === newSocket.id) {
-          console.log('Ignoring own ICE candidate');
-          return;
-        }
-
         await currentCall.addIceCandidate(data.candidate);
       } catch (error) {
         console.warn('Error handling ICE candidate:', error);
@@ -89,7 +106,7 @@ const CallSystem = ({ user, onLogout }) => {
     newSocket.on('call-ended', () => {
       stopRingtone();
       stopRingback();
-      endCall();
+      handleEndCall();
     });
 
     // Cleanup function
@@ -101,7 +118,7 @@ const CallSystem = ({ user, onLogout }) => {
       }
       newSocket.close();
     };
-  }, [user]);
+  }, [user, currentCall, handleEndCall, handlePlayRingtone]);
 
   const playRingtone = () => {
     // Create audio context for ringtone if no file available
@@ -214,7 +231,7 @@ const CallSystem = ({ user, onLogout }) => {
         if (state === 'connected') {
           setCallStatus('connected');
         } else if (state === 'failed' || state === 'disconnected') {
-          endCall();
+          handleEndCall();
         }
       });
       
@@ -252,7 +269,7 @@ const CallSystem = ({ user, onLogout }) => {
         if (state === 'connected') {
           setCallStatus('connected');
         } else if (state === 'failed' || state === 'disconnected') {
-          endCall();
+          handleEndCall();
         }
       });
       
@@ -281,21 +298,6 @@ const CallSystem = ({ user, onLogout }) => {
     }
     stopRingtone();
     setIncomingCall(null);
-  };
-
-  const endCall = () => {
-    console.log('Ending call and cleaning up resources');
-    stopRingtone();
-    stopRingback();
-    
-    if (currentCall) {
-      currentCall.endCall();
-    }
-    
-    setCallStatus('idle');
-    setCurrentCall(null);
-    setIncomingCall(null);
-    setConnectionState('new');
   };
 
   return (
@@ -357,7 +359,7 @@ const CallSystem = ({ user, onLogout }) => {
             )}
           </div>
           <div className="call-controls">
-            <button onClick={endCall} className="end-call-btn">End Call</button>
+            <button onClick={handleEndCall} className="end-call-btn">End Call</button>
           </div>
         </div>
       )}
@@ -386,7 +388,7 @@ const CallSystem = ({ user, onLogout }) => {
           <div className="calling-status">
             <h3>Calling {currentCall?.targetUser?.username}...</h3>
             <p>{callType === 'audio' ? '📞 Voice Call' : '📹 Video Call'}</p>
-            <button onClick={endCall} className="end-call-btn">Cancel</button>
+            <button onClick={handleEndCall} className="end-call-btn">Cancel</button>
           </div>
         )}
 
