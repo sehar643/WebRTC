@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import UserList from './UserList';
 import IncomingCall from './IncomingCall';
@@ -11,36 +11,13 @@ const CallSystem = ({ user, onLogout }) => {
   const [incomingCall, setIncomingCall] = useState(null);
   const [callStatus, setCallStatus] = useState('idle'); // idle, calling, connecting, connected
   const [mediaError, setMediaError] = useState(null);
-  const [callType, setCallType] = useState('video'); // 'video' or 'audio'
+  const [callType, setCallType] = useState('video');
   const [connectionState, setConnectionState] = useState('new');
-  const [currentRoom, setCurrentRoom] = useState(null);
   
   // Audio refs for ringtones and remote audio
   const ringtoneRef = useRef(null);
   const ringbackRef = useRef(null);
   const remoteAudioRef = useRef(null);
-
-  // Memoize functions that are used in useEffect
-  const handleEndCall = useCallback(() => {
-    console.log('Ending call and cleaning up resources');
-    stopRingtone();
-    stopRingback();
-    
-    if (currentCall) {
-      currentCall.endCall();
-    }
-    
-    setCallStatus('idle');
-    setCurrentCall(null);
-    setIncomingCall(null);
-    setConnectionState('new');
-  }, [currentCall]);
-
-  const handlePlayRingtone = useCallback(() => {
-    if (ringtoneRef.current) {
-      ringtoneRef.current.play().catch(e => console.warn('Ringtone autoplay failed:', e));
-    }
-  }, []);
 
   useEffect(() => {
     const newSocket = io('http://localhost:5001');
@@ -62,7 +39,7 @@ const CallSystem = ({ user, onLogout }) => {
       console.log('Received incoming call:', data);
       setIncomingCall(data);
       setCallType(data.callType || 'video');
-      handlePlayRingtone();
+      playRingtone();
     });
 
     // Listen for call answered
@@ -75,17 +52,48 @@ const CallSystem = ({ user, onLogout }) => {
           setCallStatus('connecting');
         } catch (error) {
           console.error('Error handling answer:', error);
-          handleEndCall();
+          endCall();
         }
       }
     });
 
-    // Listen for ICE candidates
+    // Listen for ICE candidates with proper cleanup
     const handleIceCandidate = async (data) => {
-      if (!currentCall || data.senderId === newSocket.id) return;
-      
+      console.log('Received ICE candidate');
+      if (!currentCall?.peerConnection) return;
+
       try {
-        await currentCall.addIceCandidate(data.candidate);
+        if (data.senderId === newSocket.id) {
+          console.log('Ignoring own ICE candidate');
+          return;
+        }
+
+        if (currentCall.peerConnection.signalingState === 'closed') {
+          console.log('Ignoring ICE candidate - connection is closed');
+          return;
+        }
+
+        // Create a promise that resolves when the remote description is set
+        const waitForRemoteDescription = () => {
+          return new Promise((resolve) => {
+            const checkDescription = () => {
+              if (currentCall?.peerConnection?.remoteDescription) {
+                resolve();
+              } else if (currentCall?.peerConnection?.signalingState !== 'closed') {
+                setTimeout(checkDescription, 100);
+              }
+            };
+            checkDescription();
+          });
+        };
+
+        // Wait for remote description before adding candidate
+        await waitForRemoteDescription();
+        
+        if (currentCall?.peerConnection?.signalingState !== 'closed') {
+          await currentCall.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+          console.log('Added ICE candidate successfully');
+        }
       } catch (error) {
         console.warn('Error handling ICE candidate:', error);
       }
@@ -106,19 +114,19 @@ const CallSystem = ({ user, onLogout }) => {
     newSocket.on('call-ended', () => {
       stopRingtone();
       stopRingback();
-      handleEndCall();
+      endCall();
     });
 
     // Cleanup function
     return () => {
       console.log('Cleaning up socket and call resources');
-      cleanupFunctions.forEach(cleanup => cleanup());
       if (currentCall) {
         currentCall.endCall();
       }
+      cleanupFunctions.forEach(cleanup => cleanup());
       newSocket.close();
     };
-  }, [user, currentCall, handleEndCall, handlePlayRingtone]);
+  }, [user]);
 
   const playRingtone = () => {
     // Create audio context for ringtone if no file available
@@ -201,7 +209,7 @@ const CallSystem = ({ user, onLogout }) => {
   const initiateCall = async (targetUser, type = 'video') => {
     if (!socket || callStatus !== 'idle') return;
 
-    console.log('📞 CLIENT: Initiating call:', { targetUser, type });
+    console.log('Initiating call:', { targetUser, type });
     setCallStatus('calling');
     setMediaError(null);
     setCallType(type);
@@ -231,7 +239,7 @@ const CallSystem = ({ user, onLogout }) => {
         if (state === 'connected') {
           setCallStatus('connected');
         } else if (state === 'failed' || state === 'disconnected') {
-          handleEndCall();
+          endCall();
         }
       });
       
@@ -261,21 +269,35 @@ const CallSystem = ({ user, onLogout }) => {
       console.log('Accepting call with type:', incomingCallType);
       setCallType(incomingCallType);
       
-      // Device checks...
+      // For audio calls, only check for audio devices
+      if (incomingCallType === 'audio' && !hasAudio) {
+        throw new Error('No microphone found. Please check your audio devices.');
+      }
       
+      // For video calls, check both audio and video
+      if (incomingCallType === 'video') {
+        if (!hasAudio) {
+          throw new Error('No microphone found. Please check your audio devices.');
+        }
+        if (!hasVideo) {
+          throw new Error('No camera found. Please check your video devices.');
+        }
+      }
+
       const call = new VideoCall(socket, user, incomingCall.callerInfo, incomingCallType);
       call.setConnectionStateHandler((state) => {
         setConnectionState(state);
         if (state === 'connected') {
           setCallStatus('connected');
         } else if (state === 'failed' || state === 'disconnected') {
-          handleEndCall();
+          endCall();
         }
       });
       
       setCurrentCall(call);
       const answer = await call.answerCall(incomingCall.offer, incomingCall.callerId);
       
+      // Send answer
       socket.emit('answer-call', {
         answer: answer,
         callerId: incomingCall.callerId,
@@ -298,6 +320,21 @@ const CallSystem = ({ user, onLogout }) => {
     }
     stopRingtone();
     setIncomingCall(null);
+  };
+
+  const endCall = () => {
+    console.log('Ending call and cleaning up resources');
+    stopRingtone();
+    stopRingback();
+    
+    if (currentCall) {
+      currentCall.endCall();
+    }
+    
+    setCallStatus('idle');
+    setCurrentCall(null);
+    setIncomingCall(null);
+    setConnectionState('new');
   };
 
   return (
@@ -359,7 +396,7 @@ const CallSystem = ({ user, onLogout }) => {
             )}
           </div>
           <div className="call-controls">
-            <button onClick={handleEndCall} className="end-call-btn">End Call</button>
+            <button onClick={endCall} className="end-call-btn">End Call</button>
           </div>
         </div>
       )}
@@ -388,7 +425,7 @@ const CallSystem = ({ user, onLogout }) => {
           <div className="calling-status">
             <h3>Calling {currentCall?.targetUser?.username}...</h3>
             <p>{callType === 'audio' ? '📞 Voice Call' : '📹 Video Call'}</p>
-            <button onClick={handleEndCall} className="end-call-btn">Cancel</button>
+            <button onClick={endCall} className="end-call-btn">Cancel</button>
           </div>
         )}
 
@@ -489,7 +526,7 @@ class VideoCall {
                 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 if (audioContext.state === 'suspended') {
                   await audioContext.resume();
-                  console.log('AudioContext resumed');
+                  console.log('AudioContext resumed')
                 }
               }
               
@@ -529,10 +566,6 @@ class VideoCall {
         });
       }
     };
-  }
-
-  setConnectionStateHandler(handler) {
-    this.connectionStateHandler = handler;
   }
 
   async getUserMedia() {
@@ -742,6 +775,10 @@ class VideoCall {
     } catch (error) {
       console.error('Error during call cleanup:', error);
     }
+  }
+
+  setConnectionStateHandler(handler) {
+    this.connectionStateHandler = handler;
   }
 }
 
