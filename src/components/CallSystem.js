@@ -44,12 +44,33 @@ const CallSystem = ({ user, onLogout }) => {
 
     // Listen for call answered
     newSocket.on('call-answered', async (data) => {
-      console.log('Call answered:', data);
+      console.log('📞 Call answered:', data);
       stopRingback();
+      setCallStatus('connecting');
+      
       if (currentCall) {
         try {
+          console.log('Setting remote description from answer');
           await currentCall.handleAnswer(data.answer);
-          setCallStatus('connecting');
+          
+          // Start monitoring connection state
+          const monitorConnectionState = () => {
+            if (!currentCall?.peerConnection) return;
+            
+            const state = currentCall.peerConnection.connectionState;
+            const iceState = currentCall.peerConnection.iceConnectionState;
+            console.log('🔄 Monitoring - Connection state:', state, 'ICE state:', iceState);
+            
+            if (state === 'connected' || iceState === 'connected') {
+              console.log('✅ Connection established');
+              setCallStatus('connected');
+            } else if (state !== 'failed' && state !== 'closed') {
+              setTimeout(monitorConnectionState, 1000);
+            }
+          };
+          
+          monitorConnectionState();
+          
         } catch (error) {
           console.error('Error handling answer:', error);
           endCall();
@@ -59,43 +80,43 @@ const CallSystem = ({ user, onLogout }) => {
 
     // Listen for ICE candidates with proper cleanup
     const handleIceCandidate = async (data) => {
-      console.log('Received ICE candidate');
-      if (!currentCall?.peerConnection) return;
+      console.log('🧊 Received ICE candidate');
+      if (!currentCall?.peerConnection) {
+        console.log('❌ No peer connection available');
+        return;
+      }
 
       try {
         if (data.senderId === newSocket.id) {
-          console.log('Ignoring own ICE candidate');
+          console.log('⏭️ Ignoring own ICE candidate');
           return;
         }
 
-        if (currentCall.peerConnection.signalingState === 'closed') {
-          console.log('Ignoring ICE candidate - connection is closed');
-          return;
+        if (!currentCall.peerConnection.remoteDescription) {
+          console.log('⏳ Waiting for remote description...');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          if (!currentCall.peerConnection.remoteDescription) {
+            console.log('❌ Remote description not set after waiting');
+            return;
+          }
         }
 
-        // Create a promise that resolves when the remote description is set
-        const waitForRemoteDescription = () => {
-          return new Promise((resolve) => {
-            const checkDescription = () => {
-              if (currentCall?.peerConnection?.remoteDescription) {
-                resolve();
-              } else if (currentCall?.peerConnection?.signalingState !== 'closed') {
-                setTimeout(checkDescription, 100);
-              }
-            };
-            checkDescription();
-          });
-        };
-
-        // Wait for remote description before adding candidate
-        await waitForRemoteDescription();
-        
-        if (currentCall?.peerConnection?.signalingState !== 'closed') {
+        if (currentCall.peerConnection.signalingState !== 'closed') {
+          console.log('Adding ICE candidate');
           await currentCall.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-          console.log('Added ICE candidate successfully');
+          console.log('✅ ICE candidate added successfully');
+          
+          // Check states after adding candidate
+          const state = currentCall.peerConnection.connectionState;
+          const iceState = currentCall.peerConnection.iceConnectionState;
+          console.log('Current states after ICE - Connection:', state, 'ICE:', iceState);
+          
+          if (state === 'connected' || iceState === 'connected') {
+            setCallStatus('connected');
+          }
         }
       } catch (error) {
-        console.warn('Error handling ICE candidate:', error);
+        console.warn('❌ Error handling ICE candidate:', error);
       }
     };
 
@@ -235,10 +256,13 @@ const CallSystem = ({ user, onLogout }) => {
 
       const call = new VideoCall(socket, user, targetUser, type);
       call.setConnectionStateHandler((state) => {
+        console.log('Connection state handler called with state:', state);
         setConnectionState(state);
         if (state === 'connected') {
+          console.log('Setting call status to connected');
           setCallStatus('connected');
         } else if (state === 'failed' || state === 'disconnected') {
+          console.log('Call failed or disconnected, ending call');
           endCall();
         }
       });
@@ -286,10 +310,13 @@ const CallSystem = ({ user, onLogout }) => {
 
       const call = new VideoCall(socket, user, incomingCall.callerInfo, incomingCallType);
       call.setConnectionStateHandler((state) => {
+        console.log('Connection state handler called with state:', state);
         setConnectionState(state);
         if (state === 'connected') {
+          console.log('Setting call status to connected');
           setCallStatus('connected');
         } else if (state === 'failed' || state === 'disconnected') {
+          console.log('Call failed or disconnected, ending call');
           endCall();
         }
       });
@@ -364,7 +391,7 @@ const CallSystem = ({ user, onLogout }) => {
       />
 
       {/* Video elements (only shown for video calls) */}
-      {callType === 'video' && callStatus === 'in-call' && (
+      {callType === 'video' && (callStatus === 'connecting' || callStatus === 'connected') && (
         <div className="video-call-container">
           <video id="localVideo" className="local-video" autoPlay muted playsInline></video>
           <video id="remoteVideo" className="remote-video" autoPlay playsInline></video>
@@ -462,108 +489,93 @@ class VideoCall {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' }
-      ]
+      ],
+      iceTransportPolicy: 'all'
     };
 
-    console.log('Setting up new peer connection');
+    console.log('🔧 Setting up new peer connection');
     this.peerConnection = new RTCPeerConnection(configuration);
 
     // Handle connection state changes
     this.peerConnection.onconnectionstatechange = () => {
       const state = this.peerConnection.connectionState;
-      console.log('Connection state changed:', state);
+      console.log('🔄 Connection state changed:', state);
       
       if (this.connectionStateHandler) {
+        console.log('Calling connection state handler with state:', state);
         this.connectionStateHandler(state);
-      }
-
-      switch(state) {
-        case 'connected':
-          console.log('✅ Peers connected successfully');
-          break;
-        case 'disconnected':
-          console.log('❌ Peers disconnected');
-          break;
-        case 'failed':
-          console.log('❌ Connection failed');
-          this.endCall();
-          break;
       }
     };
 
     // Handle ICE connection state
     this.peerConnection.oniceconnectionstatechange = () => {
-      console.log('ICE connection state:', this.peerConnection.iceConnectionState);
-      if (this.peerConnection.iceConnectionState === 'connected') {
+      const state = this.peerConnection.iceConnectionState;
+      console.log('🧊 ICE connection state changed:', state);
+      
+      if (state === 'connected') {
         console.log('✅ ICE connection established');
+        if (this.connectionStateHandler) {
+          this.connectionStateHandler('connected');
+        }
       }
+    };
+
+    // Handle ICE gathering state
+    this.peerConnection.onicegatheringstatechange = () => {
+      console.log('🧊 ICE gathering state:', this.peerConnection.iceGatheringState);
+    };
+
+    // Handle ICE candidates
+    this.peerConnection.onicecandidate = (event) => {
+      if (event.candidate) {
+        console.log('🧊 Generated ICE candidate');
+        this.socket.emit('ice-candidate', {
+          candidate: event.candidate,
+          targetUserId: this.targetUser.id
+        });
+      } else {
+        console.log('✅ ICE candidate generation completed');
+      }
+    };
+
+    // Handle signaling state changes
+    this.peerConnection.onsignalingstatechange = () => {
+      console.log('📡 Signaling state:', this.peerConnection.signalingState);
     };
 
     // Handle remote stream
     this.peerConnection.ontrack = (event) => {
-      console.log('Received remote track:', event.track.kind);
+      console.log('📡 Received remote track:', event.track.kind);
       const [remoteStream] = event.streams;
       
       if (this.callType === 'video') {
         const remoteVideo = document.getElementById('remoteVideo');
         if (remoteVideo) {
+          console.log('Setting up remote video stream');
           remoteVideo.srcObject = remoteStream;
-          remoteVideo.play().catch(e => console.warn('Remote video autoplay failed:', e));
+          remoteVideo.play().catch(e => console.warn('⚠️ Remote video autoplay failed:', e));
         }
       } else {
-        // For audio calls, ensure proper audio handling
         const remoteAudio = document.getElementById('remoteAudio');
         if (remoteAudio) {
           console.log('Setting up remote audio stream');
           remoteAudio.srcObject = remoteStream;
           remoteAudio.volume = 1.0;
           
-          // Handle audio autoplay with fallback
-          const playAudio = async () => {
-            try {
-              // Ensure audio context is running
-              if (window.AudioContext || window.webkitAudioContext) {
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                if (audioContext.state === 'suspended') {
-                  await audioContext.resume();
-                  console.log('AudioContext resumed')
-                }
+          remoteAudio.play().catch(error => {
+            console.warn('⚠️ Audio autoplay failed:', error);
+            const startAudio = async () => {
+              try {
+                await remoteAudio.play();
+                console.log('✅ Audio started after user interaction');
+                document.removeEventListener('click', startAudio);
+              } catch (e) {
+                console.error('❌ Failed to play audio:', e);
               }
-              
-              await remoteAudio.play();
-              console.log('Remote audio playing successfully');
-            } catch (error) {
-              console.warn('Audio autoplay failed, waiting for user interaction:', error);
-              
-              // Add a click handler for user interaction
-              const startAudio = async () => {
-                try {
-                  await remoteAudio.play();
-                  console.log('Audio started after user interaction');
-                  document.removeEventListener('click', startAudio);
-                } catch (e) {
-                  console.error('Failed to play audio after user interaction:', e);
-                }
-              };
-              document.addEventListener('click', startAudio);
-            }
-          };
-          
-          playAudio();
-        } else {
-          console.error('Remote audio element not found!');
+            };
+            document.addEventListener('click', startAudio);
+          });
         }
-      }
-    };
-
-    // Handle ICE candidates
-    this.peerConnection.onicecandidate = (event) => {
-      if (event.candidate) {
-        console.log('Sending ICE candidate');
-        this.socket.emit('ice-candidate', {
-          candidate: event.candidate,
-          targetUserId: this.targetUser.id
-        });
       }
     };
   }
@@ -726,6 +738,24 @@ class VideoCall {
       console.log('Setting remote description (answer)');
       await this.peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
       console.log('Remote description set successfully');
+      
+      // Check connection state after setting remote description
+      const checkConnectionState = () => {
+        const state = this.peerConnection.connectionState;
+        const iceState = this.peerConnection.iceConnectionState;
+        console.log('Current states - Connection:', state, 'ICE:', iceState);
+        
+        if (state === 'connected' || iceState === 'connected') {
+          if (this.connectionStateHandler) {
+            this.connectionStateHandler('connected');
+          }
+        } else if (state !== 'connecting' && state !== 'new') {
+          setTimeout(checkConnectionState, 500);
+        }
+      };
+      
+      // Start checking connection state
+      checkConnectionState();
       
     } catch (error) {
       console.error('Error handling answer:', error);
